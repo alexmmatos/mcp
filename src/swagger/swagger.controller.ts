@@ -136,6 +136,8 @@ export class SwaggerController {
     return this.swaggerService.removeTool(id, toolName);
   }
 
+  // ── Legacy single-key endpoints (backward-compat) ─────────────────────────
+
   @Post('projects/:id/api-key')
   generateApiKey(@Param('id') id: string) {
     return this.swaggerService.generateApiKey(id);
@@ -145,6 +147,50 @@ export class SwaggerController {
   @HttpCode(204)
   revokeApiKey(@Param('id') id: string) {
     return this.swaggerService.revokeApiKey(id);
+  }
+
+  // ── Multi-key endpoints ────────────────────────────────────────────────────
+
+  @Post('projects/:id/api-keys')
+  addApiKey(
+    @Param('id') id: string,
+    @Body('name') name: string,
+  ) {
+    if (!name?.trim()) throw new BadRequestException('name é obrigatório.');
+    return this.swaggerService.addApiKey(id, name);
+  }
+
+  @Delete('projects/:id/api-keys/:keyId')
+  @HttpCode(204)
+  removeApiKey(
+    @Param('id') id: string,
+    @Param('keyId') keyId: string,
+  ) {
+    return this.swaggerService.removeApiKey(id, keyId);
+  }
+
+  // ── Re-import spec ─────────────────────────────────────────────────────────
+
+  @Post('projects/:id/reimport')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  async reimport(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Query('baseUrl') baseUrl?: string,
+  ) {
+    if (!file) throw new BadRequestException('Nenhum arquivo enviado.');
+    const lower = file.originalname.toLowerCase();
+    if (!lower.endsWith('.yaml') && !lower.endsWith('.yml') && !lower.endsWith('.json')) {
+      throw new BadRequestException('Formato inválido. Envie um arquivo .yaml, .yml ou .json.');
+    }
+    return this.swaggerService.reimportSpec(
+      id,
+      file.buffer.toString('utf-8'),
+      file.originalname,
+      baseUrl,
+    );
   }
 
   @Patch('projects/:id/auth')

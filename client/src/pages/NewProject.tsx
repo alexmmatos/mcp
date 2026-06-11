@@ -139,6 +139,7 @@ export default function NewProject() {
 
   // Step 4 — MCP Protection
   const [mcpAuthEnabled, setMcpAuthEnabled] = useState(false)
+  const [mcpKeyNames, setMcpKeyNames] = useState<string[]>(['Default'])
   const [rateLimitEnabled, setRateLimitEnabled] = useState(false)
   const [rateLimitRpm, setRateLimitRpm] = useState(60)
 
@@ -320,9 +321,12 @@ export default function NewProject() {
         await api.patch(`/swagger/projects/${projectId}/auth`, buildAuth())
       }
 
-      // 4. MCP key
+      // 4. MCP keys
       if (mcpAuthEnabled) {
-        await api.post(`/swagger/projects/${projectId}/api-key`)
+        const names = mcpKeyNames.map(n => n.trim()).filter(Boolean)
+        for (const name of names.length > 0 ? names : ['Default']) {
+          await api.post(`/swagger/projects/${projectId}/api-keys`, { name })
+        }
       }
 
       // 5. Rate limit
@@ -732,13 +736,43 @@ export default function NewProject() {
               <Typography variant="subtitle1" fontWeight={700}>MCP Authentication</Typography>
             </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              Generate a secret key that AI clients must include in every request (<code>auth: &lt;key&gt;</code>) to access
-              this project's tools. Without a key the MCP endpoint is publicly accessible to anyone who knows the URL.
+              Named API keys that AI clients must include in every request (<code>auth: &lt;key&gt;</code>).
+              Use multiple keys to give different clients independent credentials you can rotate separately.
             </Typography>
             <FormControlLabel
-              control={<Switch checked={mcpAuthEnabled} onChange={(e) => setMcpAuthEnabled(e.target.checked)} color="success" />}
-              label={<Typography variant="body2">{mcpAuthEnabled ? 'A key will be generated — copy it from the project page after creation.' : 'No key — the endpoint will be publicly accessible.'}</Typography>}
+              control={
+                <Switch checked={mcpAuthEnabled}
+                  onChange={(e) => {
+                    setMcpAuthEnabled(e.target.checked)
+                    if (e.target.checked && mcpKeyNames.length === 0) setMcpKeyNames(['Default'])
+                  }}
+                  color="success" />
+              }
+              label={<Typography variant="body2">{mcpAuthEnabled ? 'Keys will be created after project is saved.' : 'No key — endpoint will be publicly accessible.'}</Typography>}
             />
+            {mcpAuthEnabled && (
+              <Box mt={2} display="flex" flexDirection="column" gap={1}>
+                {mcpKeyNames.map((n, i) => (
+                  <Box key={i} display="flex" gap={1} alignItems="center">
+                    <TextField size="small" fullWidth label={`Key ${i + 1} name`}
+                      placeholder="e.g. Claude Desktop, Production"
+                      value={n}
+                      onChange={(e) => setMcpKeyNames(prev => prev.map((v, idx) => idx === i ? e.target.value : v))}
+                    />
+                    <IconButton size="small" color="error"
+                      disabled={mcpKeyNames.length === 1}
+                      onClick={() => setMcpKeyNames(prev => prev.filter((_, idx) => idx !== i))}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+                <Button size="small" startIcon={<AddIcon />}
+                  onClick={() => setMcpKeyNames(prev => [...prev, ''])}
+                  sx={{ alignSelf: 'flex-start', mt: 0.5 }}>
+                  Add another key
+                </Button>
+              </Box>
+            )}
           </Paper>
 
           <Paper variant="outlined" sx={{ p: 3 }}>

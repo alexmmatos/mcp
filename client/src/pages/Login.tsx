@@ -89,7 +89,7 @@ export default function Login() {
             <Box display="flex" alignItems="center" justifyContent="center" mb={2}>
               <Box
                 component="img"
-                src="/images/logos/dark-logo.svg"
+                src="/images/logos/arthur-mcp-adapter-logo.svg"
                 alt="Arthur MCP Adapter"
                 sx={{ height: 36, maxWidth: '100%' }}
                 onError={(e) => {

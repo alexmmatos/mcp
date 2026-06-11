@@ -7,6 +7,7 @@ import { parseSpec } from '../dynamic-mcp/openapi-parser';
 import { generateTools } from '../dynamic-mcp/tool-generator';
 import type { AuthConfig } from '../dynamic-mcp/types';
 import {
+  McpApiKeyEntry,
   SwaggerProject,
   SwaggerProjectDocument,
 } from './swagger-project.schema';
@@ -195,7 +196,7 @@ export class SwaggerService {
     if (!project) throw new NotFoundException('Projeto não encontrado.');
   }
 
-  /** Gera (ou regenera) a API key do projeto */
+  /** Legacy — mantido para backward-compat */
   async generateApiKey(id: string): Promise<{ mcpApiKey: string }> {
     const key = crypto.randomBytes(32).toString('hex');
     const project = await this.projectModel
@@ -205,12 +206,97 @@ export class SwaggerService {
     return { mcpApiKey: key };
   }
 
-  /** Remove a API key do projeto (desativa a proteção) */
+  /** Legacy — mantido para backward-compat */
   async revokeApiKey(id: string): Promise<void> {
     const project = await this.projectModel
       .findByIdAndUpdate(id, { $unset: { mcpApiKey: 1 } })
       .exec();
     if (!project) throw new NotFoundException('Projeto não encontrado.');
+  }
+
+  /** Cria uma nova API key nomeada e adiciona ao array mcpApiKeys */
+  async addApiKey(id: string, name: string): Promise<McpApiKeyEntry> {
+    const project = await this.projectModel.findById(id).exec();
+    if (!project) throw new NotFoundException('Projeto não encontrado.');
+
+    const entry: McpApiKeyEntry = {
+      id: crypto.randomUUID(),
+      name: name.trim(),
+      key: crypto.randomBytes(32).toString('hex'),
+      createdAt: new Date(),
+    };
+
+    (project.mcpApiKeys as any).push(entry);
+    project.markModified('mcpApiKeys');
+    await project.save();
+    return entry;
+  }
+
+  /** Remove uma API key pelo id */
+  async removeApiKey(id: string, keyId: string): Promise<void> {
+    const project = await this.projectModel.findById(id).exec();
+    if (!project) throw new NotFoundException('Projeto não encontrado.');
+
+    const idx = project.mcpApiKeys.findIndex((k) => k.id === keyId);
+    if (idx === -1) throw new NotFoundException('Key não encontrada.');
+
+    (project.mcpApiKeys as any).splice(idx, 1);
+    project.markModified('mcpApiKeys');
+    await project.save();
+  }
+
+  /**
+   * Re-importa um spec em um projeto existente.
+   * - Tools com mesmo nome: atualiza inputSchema + endpointRef (preserva enabled/description)
+   * - Tools novas no spec: adiciona
+   * - Tools que sumiram do spec: NÃO remove (usuário deleta manualmente)
+   * - Atualiza rawSpec e baseUrl se fornecido
+   */
+  async reimportSpec(
+    id: string,
+    content: string,
+    filename: string,
+    baseUrlOverride?: string,
+  ): Promise<{ added: number; updated: number; baseUrl: string }> {
+    const project = await this.projectModel.findById(id).exec();
+    if (!project) throw new NotFoundException('Projeto não encontrado.');
+
+    const rawSpec = this.parseContent(content, filename);
+    this.validateSpec(rawSpec);
+
+    let normalizedSpec: Awaited<ReturnType<typeof parseSpec>>;
+    try {
+      normalizedSpec = await parseSpec(rawSpec);
+    } catch (err: any) {
+      throw new BadRequestException(`Erro ao processar o spec: ${err?.message ?? err}`);
+    }
+
+    const baseUrl = baseUrlOverride?.trim() || normalizedSpec.servers[0]?.url || project.baseUrl;
+    const newTools = generateTools(normalizedSpec, baseUrl);
+
+    let added = 0;
+    let updated = 0;
+
+    for (const newTool of newTools) {
+      const existingIdx = project.tools.findIndex((t) => t.name === newTool.name);
+      if (existingIdx === -1) {
+        (project.tools as any).push(newTool);
+        added++;
+      } else {
+        const existing = project.tools[existingIdx] as any;
+        existing.inputSchema = newTool.inputSchema;
+        existing.endpointRef = newTool.endpointRef;
+        updated++;
+      }
+    }
+
+    project.rawSpec = rawSpec;
+    project.baseUrl = baseUrl;
+    project.markModified('tools');
+    await project.save();
+
+    this.logger.log(`Re-import "${project.name}": +${added} adicionadas, ${updated} atualizadas`);
+    return { added, updated, baseUrl };
   }
 
   /** Cria um projeto vazio sem ferramentas */

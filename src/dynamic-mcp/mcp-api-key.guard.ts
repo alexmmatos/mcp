@@ -14,12 +14,13 @@ import {
 
 /**
  * Guard aplicado nos endpoints do protocolo MCP (/mcp/project/:projectId).
- * Se o projeto tiver mcpApiKey configurada, o cliente deve fornecer:
- *   Authorization: Bearer <key>
- *   — ou —
- *   X-Api-Key: <key>
  *
- * Se o projeto não tiver key configurada, a requisição é liberada.
+ * Ordem de verificação:
+ *  1. Se o projeto tem `mcpApiKeys` (novo sistema), valida contra qualquer uma delas.
+ *  2. Se o projeto tem `mcpApiKey` (legacy, campo único), valida contra ele.
+ *  3. Se não tem nenhuma key configurada, acesso livre.
+ *
+ * O cliente deve fornecer a key no header:  auth: <key>
  */
 @Injectable()
 export class McpApiKeyGuard implements CanActivate {
@@ -34,22 +35,33 @@ export class McpApiKeyGuard implements CanActivate {
 
     const project = await this.projectModel
       .findById(projectId)
-      .select('mcpApiKey')
+      .select('mcpApiKey mcpApiKeys')
       .exec();
 
-    // Se projeto não existe, deixa passar (o service vai lançar 404)
     if (!project) return true;
 
-    // Sem key configurada → acesso livre
-    if (!project.mcpApiKey) return true;
+    const hasNewKeys = project.mcpApiKeys && project.mcpApiKeys.length > 0;
+    const hasLegacyKey = !!project.mcpApiKey;
+
+    if (!hasNewKeys && !hasLegacyKey) return true;
 
     const provided =
       typeof req.headers['auth'] === 'string' ? req.headers['auth'].trim() : null;
 
-    if (!provided || provided !== project.mcpApiKey) {
+    if (!provided) {
       throw new UnauthorizedException(
-        'API key inválida ou ausente. Forneça o header: auth: <key>',
+        'API key ausente. Forneça o header: auth: <key>',
       );
+    }
+
+    if (hasNewKeys) {
+      const match = project.mcpApiKeys.some((k) => k.key === provided);
+      if (!match) throw new UnauthorizedException('API key inválida.');
+      return true;
+    }
+
+    if (provided !== project.mcpApiKey) {
+      throw new UnauthorizedException('API key inválida.');
     }
 
     return true;

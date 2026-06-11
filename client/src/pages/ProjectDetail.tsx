@@ -40,10 +40,12 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AutorenewIcon from '@mui/icons-material/Autorenew'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
+import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import LockIcon from '@mui/icons-material/Lock'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
 import BuildIcon from '@mui/icons-material/Build'
@@ -95,6 +97,13 @@ interface GeneratedTool {
   enabled?: boolean
 }
 
+interface McpApiKeyEntry {
+  id: string
+  name: string
+  key: string
+  createdAt: string
+}
+
 interface Project {
   _id: string
   name: string
@@ -103,7 +112,8 @@ interface Project {
   version?: string
   status: string
   tools: GeneratedTool[]
-  mcpApiKey?: string
+  mcpApiKey?: string       // legacy
+  mcpApiKeys?: McpApiKeyEntry[]
   rateLimit?: { enabled: boolean; requestsPerMinute: number }
   auth?: AuthConfig
   createdAt: string
@@ -354,7 +364,7 @@ function BaseUrlPanel({ projectId, initialValue, onChange }: {
 
 // ─── MCP Endpoint bar ─────────────────────────────────────────────────────────
 
-function McpEndpointBar({ projectId, mcpApiKey }: { projectId: string; mcpApiKey?: string }) {
+function McpEndpointBar({ projectId, hasKeys }: { projectId: string; hasKeys: boolean }) {
   const [copied, setCopied] = useState(false)
   const url = `${window.location.origin}/api/mcp/project/${projectId}`
 
@@ -402,7 +412,7 @@ function McpEndpointBar({ projectId, mcpApiKey }: { projectId: string; mcpApiKey
       </Box>
 
       <Typography variant="caption" color="text.secondary" mt={0.75} display="block">
-        {mcpApiKey
+        {hasKeys
           ? <>Configure this URL in your MCP client and include the header <Box component="code" sx={{ bgcolor: '#f0f0f0', px: 0.8, py: 0.2, borderRadius: 0.5, fontSize: '0.78rem' }}>auth: &lt;key&gt;</Box></>
           : 'Configure this URL in Claude Desktop, Cursor, or any compatible MCP client.'}
       </Typography>
@@ -412,150 +422,295 @@ function McpEndpointBar({ projectId, mcpApiKey }: { projectId: string; mcpApiKey
 
 // ─── API Key panel ────────────────────────────────────────────────────────────
 
-function ApiKeyPanel({ projectId, initialKey, onChange }: {
-  projectId: string
-  initialKey?: string
-  onChange: (key: string | undefined) => void
-}) {
-  const [key, setKey] = useState(initialKey)
-  const [visible, setVisible] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [copied, setCopied] = useState(false)
+// ─── Multi-key MCP authentication panel ──────────────────────────────────────
 
-  const handleGenerate = async () => {
-    if (key) {
-      const result = await Swal.fire({
-        title: 'Regenerate key?',
-        text: 'The current key will be invalidated and any client using it will stop working.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Regenerate',
-        cancelButtonText: 'Cancel',
-        confirmButtonColor: '#f57c00',
-      })
-      if (!result.isConfirmed) return
-    }
-    setLoading(true)
+function ApiKeysPanel({ projectId, initialKeys, onChange }: {
+  projectId: string
+  initialKeys: McpApiKeyEntry[]
+  onChange: (keys: McpApiKeyEntry[]) => void
+}) {
+  const [keys, setKeys] = useState<McpApiKeyEntry[]>(initialKeys)
+  const [newKeyName, setNewKeyName] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState('')
+  // After creation, the newly created key id is tracked to highlight it
+  const [newlyCreatedId, setNewlyCreatedId] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set())
+
+  const syncKeys = (updated: McpApiKeyEntry[]) => { setKeys(updated); onChange(updated) }
+
+  const handleAdd = async () => {
+    if (!newKeyName.trim()) { setAddError('Name is required.'); return }
+    setAdding(true)
+    setAddError('')
     try {
-      const res = await api.post<{ mcpApiKey: string }>(`/swagger/projects/${projectId}/api-key`)
-      setKey(res.data.mcpApiKey)
-      onChange(res.data.mcpApiKey)
-      setVisible(true)
-    } finally { setLoading(false) }
+      const { data } = await api.post<McpApiKeyEntry>(`/swagger/projects/${projectId}/api-keys`, { name: newKeyName.trim() })
+      const updated = [...keys, data]
+      syncKeys(updated)
+      setNewlyCreatedId(data.id)
+      setVisibleIds((s) => new Set([...s, data.id]))
+      setAddOpen(false)
+      setNewKeyName('')
+    } catch (err: any) {
+      setAddError(err?.response?.data?.message ?? 'Error creating key.')
+    } finally { setAdding(false) }
   }
 
-  const handleRevoke = async () => {
+  const handleRevoke = async (entry: McpApiKeyEntry) => {
     const result = await Swal.fire({
-      title: 'Remove key?',
-      text: 'The MCP server will be accessible without authentication.',
+      title: `Revoke "${entry.name}"?`,
+      text: 'Any client using this key will immediately lose access.',
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'Remove',
+      confirmButtonText: 'Revoke',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#d33',
     })
     if (!result.isConfirmed) return
-    setLoading(true)
-    try {
-      await api.delete(`/swagger/projects/${projectId}/api-key`)
-      setKey(undefined)
-      onChange(undefined)
-      setVisible(false)
-    } finally { setLoading(false) }
+    await api.delete(`/swagger/projects/${projectId}/api-keys/${entry.id}`)
+    const updated = keys.filter((k) => k.id !== entry.id)
+    syncKeys(updated)
+    if (newlyCreatedId === entry.id) setNewlyCreatedId(null)
   }
 
-  const handleCopy = () => {
-    if (!key) return
-    navigator.clipboard.writeText(key)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const handleCopy = (entry: McpApiKeyEntry) => {
+    navigator.clipboard.writeText(entry.key)
+    setCopiedId(entry.id)
+    setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const maskedKey = key ? `${key.slice(0, 8)}${'•'.repeat(24)}${key.slice(-8)}` : ''
+  const toggleVisible = (id: string) => {
+    setVisibleIds((s) => {
+      const next = new Set(s)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const maskKey = (key: string) => `${key.slice(0, 8)}${'•'.repeat(20)}${key.slice(-6)}`
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5, mb: 3 }}>
-      <Box display="flex" alignItems="center" gap={1} mb={key ? 2 : 0}>
-        {key ? <LockIcon color="success" fontSize="small" /> : <LockOpenIcon color="disabled" fontSize="small" />}
+      <Box display="flex" alignItems="center" gap={1} mb={keys.length > 0 ? 2 : 0}>
+        {keys.length > 0
+          ? <LockIcon color="success" fontSize="small" />
+          : <LockOpenIcon color="disabled" fontSize="small" />}
         <Box display="flex" alignItems="center" gap={0.5} flexGrow={1}>
           <Typography variant="subtitle1" fontWeight={700}>MCP Authentication</Typography>
           <HelpButton title="MCP Authentication">
             <Typography variant="body2" gutterBottom>
-              An API key that controls who can access this project's MCP endpoint. When a key is active, <strong>every</strong> client request must include the header <code>auth: &lt;key&gt;</code> — requests without it receive HTTP 401 and are rejected before reaching any tool.
+              Named API keys that control who can access this project's MCP endpoint.
+              Every client request must include <code>auth: &lt;key&gt;</code> — requests without a valid key return HTTP 401.
             </Typography>
             <Typography variant="body2" gutterBottom>
-              <strong>Without a key</strong>, the endpoint is completely open: anyone who knows the URL can connect an AI client, read all tool descriptions, and trigger calls to your upstream API. This is acceptable for private networks or local testing, but risky on publicly reachable servers.
+              Use <strong>multiple keys</strong> to give different clients independent credentials:
+              you can rotate or revoke one key without affecting others.
             </Typography>
-            <Typography variant="body2" gutterBottom>
-              <strong>Key lifecycle:</strong>
-            </Typography>
-            <Box component="ul" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
-              <Box component="li"><Typography variant="body2"><strong>Generate:</strong> creates a cryptographically random key and activates protection immediately.</Typography></Box>
-              <Box component="li"><Typography variant="body2"><strong>View (eye icon):</strong> reveals the full key. Copy it now — you cannot retrieve it again without regenerating.</Typography></Box>
-              <Box component="li"><Typography variant="body2"><strong>Regenerate:</strong> immediately invalidates the old key and issues a new one. Any client using the old key will stop working until updated.</Typography></Box>
-              <Box component="li"><Typography variant="body2"><strong>Remove:</strong> disables authentication entirely, making the endpoint public again.</Typography></Box>
-            </Box>
             <Typography variant="body2">
-              Treat the key like a password: never commit it to source code repositories or share it in plain-text configuration files. If it is compromised, regenerate it immediately.
+              Without any key configured, the endpoint is <strong>publicly accessible</strong> to anyone who knows the URL.
             </Typography>
           </HelpButton>
         </Box>
-        {!key && (
-          <Button size="small" variant="contained" startIcon={<LockIcon fontSize="small" />}
-            onClick={handleGenerate} disabled={loading}>
-            {loading ? <CircularProgress size={14} color="inherit" /> : 'Generate key'}
-          </Button>
-        )}
-        {key && (
-          <Box display="flex" gap={1}>
-            <Tooltip title="Regenerate key">
-              <span>
-                <IconButton size="small" onClick={handleGenerate} disabled={loading}>
-                  {loading ? <CircularProgress size={16} /> : <AutorenewIcon fontSize="small" />}
-                </IconButton>
-              </span>
-            </Tooltip>
-            <Tooltip title="Remove key (disable auth)">
-              <IconButton size="small" color="error" onClick={handleRevoke} disabled={loading}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
+        <Button size="small" variant="contained" startIcon={<AddIcon fontSize="small" />}
+          onClick={() => { setAddOpen(true); setNewKeyName(''); setAddError('') }}>
+          Add key
+        </Button>
       </Box>
 
-      {key ? (
-        <>
-          <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <Box sx={{
-              flexGrow: 1, fontFamily: 'monospace', fontSize: '0.82rem',
-              bgcolor: '#f5f5f5', border: '1px solid #e0e0e0', borderRadius: 1,
-              px: 1.5, py: 1, letterSpacing: '0.04em', color: 'text.primary',
-              overflow: 'hidden', whiteSpace: 'nowrap',
-            }}>
-              {visible ? key : maskedKey}
-            </Box>
-            <Tooltip title={visible ? 'Hide' : 'Show'}>
-              <IconButton size="small" onClick={() => setVisible((v) => !v)}>
-                {visible ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
-              </IconButton>
-            </Tooltip>
-            <Tooltip title={copied ? 'Copied!' : 'Copy'}>
-              <IconButton size="small" color={copied ? 'primary' : 'default'} onClick={handleCopy}>
-                <ContentCopyIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          <Typography variant="caption" color="text.secondary" component="div">
-            Use in the header: <Box component="code" sx={{ bgcolor: '#f0f0f0', px: 0.8, py: 0.2, borderRadius: 0.5, fontSize: '0.78rem' }}>auth: {visible ? key : '<your-key>'}</Box>
-          </Typography>
-        </>
-      ) : (
-        <Typography variant="body2" color="text.disabled" mt={1}>
-          No authentication — any client can call the MCP server for this project.
+      {keys.length === 0 ? (
+        <Typography variant="body2" color="text.disabled">
+          No keys — any MCP client can connect without authentication.
         </Typography>
+      ) : (
+        <Box display="flex" flexDirection="column" gap={1}>
+          {keys.map((entry) => {
+            const isNew = entry.id === newlyCreatedId
+            const isVisible = visibleIds.has(entry.id)
+            return (
+              <Box key={entry.id} sx={{
+                display: 'flex', alignItems: 'center', gap: 1,
+                border: '1px solid', borderColor: isNew ? 'success.light' : 'divider',
+                borderRadius: 1, px: 1.5, py: 1,
+                bgcolor: isNew ? '#f0fdf4' : 'transparent',
+                transition: 'background-color 0.3s',
+              }}>
+                <Box flexGrow={1} minWidth={0}>
+                  <Box display="flex" alignItems="center" gap={0.75} mb={0.25}>
+                    <Typography fontWeight={600} fontSize="0.875rem">{entry.name}</Typography>
+                    {isNew && <Chip label="new — copy now" size="small" color="success" sx={{ fontSize: '0.65rem', height: 18 }} />}
+                  </Box>
+                  <Box sx={{
+                    fontFamily: 'monospace', fontSize: '0.78rem', color: 'text.secondary',
+                    overflow: 'hidden', whiteSpace: 'nowrap',
+                  }}>
+                    {isVisible ? entry.key : maskKey(entry.key)}
+                  </Box>
+                  <Typography variant="caption" color="text.disabled">
+                    Created {new Date(entry.createdAt).toLocaleDateString()}
+                  </Typography>
+                </Box>
+                <Tooltip title={isVisible ? 'Hide key' : 'Show key'}>
+                  <IconButton size="small" onClick={() => toggleVisible(entry.id)}>
+                    {isVisible ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title={copiedId === entry.id ? 'Copied!' : 'Copy key'}>
+                  <IconButton size="small" color={copiedId === entry.id ? 'primary' : 'default'} onClick={() => handleCopy(entry)}>
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Revoke key">
+                  <IconButton size="small" color="error" onClick={() => handleRevoke(entry)}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            )
+          })}
+          <Typography variant="caption" color="text.secondary" mt={0.5}>
+            Use in the header: <Box component="code" sx={{ bgcolor: '#f0f0f0', px: 0.8, py: 0.2, borderRadius: 0.5, fontSize: '0.75rem' }}>auth: &lt;key&gt;</Box>
+          </Typography>
+        </Box>
       )}
+
+      {/* Add key dialog */}
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>Add API key</DialogTitle>
+        <DialogContent dividers>
+          {addError && <Alert severity="error" sx={{ mb: 2 }}>{addError}</Alert>}
+          <TextField size="small" fullWidth autoFocus label="Key name"
+            placeholder="e.g. Claude Desktop, Production client"
+            value={newKeyName}
+            onChange={(e) => { setNewKeyName(e.target.value); setAddError('') }}
+            onKeyDown={(e) => e.key === 'Enter' && !adding && handleAdd()}
+            helperText="A label to identify which client uses this key"
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleAdd} disabled={adding}
+            startIcon={adding ? <CircularProgress size={14} color="inherit" /> : <LockIcon fontSize="small" />}>
+            {adding ? 'Creating…' : 'Create key'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
+  )
+}
+
+// ─── Re-import spec dialog ────────────────────────────────────────────────────
+
+function ReimportSpecDialog({ projectId, open, onClose, onSuccess }: {
+  projectId: string
+  open: boolean
+  onClose: () => void
+  onSuccess: (result: { added: number; updated: number; baseUrl: string }) => void
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const [baseUrl, setBaseUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const reset = () => { setFile(null); setBaseUrl(''); setError('') }
+
+  const handleClose = () => { reset(); onClose() }
+
+  const acceptFile = (f: File) => {
+    const n = f.name.toLowerCase()
+    if (!n.endsWith('.yaml') && !n.endsWith('.yml') && !n.endsWith('.json')) {
+      setError('Unsupported format — use .yaml, .yml or .json')
+      return
+    }
+    setFile(f)
+    setError('')
+  }
+
+  const handleImport = async () => {
+    if (!file) return
+    setLoading(true)
+    setError('')
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const params = baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}
+      const { data } = await api.post<{ added: number; updated: number; baseUrl: string }>(
+        `/swagger/projects/${projectId}/reimport`, form,
+        { params, headers: { 'Content-Type': 'multipart/form-data' } },
+      )
+      reset()
+      onSuccess(data)
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? 'Error importing spec.'
+      setError(Array.isArray(msg) ? msg.join(', ') : msg)
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ pb: 1 }}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <AutorenewIcon fontSize="small" color="primary" />
+          <Typography variant="h6" fontWeight={700}>Re-import API spec</Typography>
+        </Box>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" mb={2}>
+          Upload a new version of the spec. Tools with the same name will be updated (schema + endpoint);
+          new tools will be added. Existing tools not in the new spec are kept — delete them manually if needed.
+        </Typography>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {/* Drop zone */}
+        <Paper variant="outlined"
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) acceptFile(f) }}
+          onClick={() => !file && fileInputRef.current?.click()}
+          sx={{
+            p: 3, textAlign: 'center', cursor: file ? 'default' : 'pointer',
+            border: '2px dashed',
+            borderColor: dragging ? 'primary.main' : file ? 'success.main' : 'divider',
+            bgcolor: dragging ? 'primary.light' : file ? '#f0fdf4' : 'background.paper',
+            transition: 'all 0.15s', mb: 2,
+            '&:hover': file ? {} : { bgcolor: 'action.hover', borderColor: 'primary.light' },
+          }}
+        >
+          <input ref={fileInputRef} type="file" accept=".yaml,.yml,.json" hidden
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) acceptFile(f); e.target.value = '' }} />
+          {file ? (
+            <Box display="flex" flexDirection="column" alignItems="center" gap={0.5}>
+              <InsertDriveFileIcon sx={{ fontSize: 36, color: 'success.main' }} />
+              <Typography fontWeight={700} color="success.main">{file.name}</Typography>
+              <Button size="small" startIcon={<CloseIcon fontSize="small" />}
+                onClick={(e) => { e.stopPropagation(); setFile(null) }}>
+                Remove
+              </Button>
+            </Box>
+          ) : (
+            <Box display="flex" flexDirection="column" alignItems="center" gap={0.5}>
+              <CloudUploadIcon sx={{ fontSize: 36, color: 'text.secondary' }} />
+              <Typography variant="body2" fontWeight={500}>Drag spec here or click to browse</Typography>
+              <Typography variant="caption" color="text.disabled">.yaml · .yml · .json</Typography>
+            </Box>
+          )}
+        </Paper>
+
+        <TextField size="small" fullWidth label="Base URL override" placeholder="https://api.example.com"
+          value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
+          helperText="Leave blank to use the URL declared in the spec" />
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+        <Button onClick={handleClose}>Cancel</Button>
+        <Button variant="contained" onClick={handleImport} disabled={!file || loading}
+          startIcon={loading ? <CircularProgress size={14} color="inherit" /> : <AutorenewIcon fontSize="small" />}>
+          {loading ? 'Importing…' : 'Import'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -1247,7 +1402,7 @@ function buildCurl(tool: GeneratedTool): string {
   return lines.join('\n')
 }
 
-function buildMcpCurl(tool: GeneratedTool, projectId: string, mcpApiKey?: string): string {
+function buildMcpCurl(tool: GeneratedTool, projectId: string, hasKeys: boolean): string {
   const url = `${window.location.origin}/api/mcp/project/${projectId}`
   const properties = tool.inputSchema.properties ?? {}
   const args = Object.fromEntries(
@@ -1262,7 +1417,7 @@ function buildMcpCurl(tool: GeneratedTool, projectId: string, mcpApiKey?: string
     `  -H 'Content-Type: application/json' \\`,
     `  -H 'Accept: application/json, text/event-stream'`,
   ]
-  if (mcpApiKey) { lines[lines.length - 1] += ' \\'; lines.push(`  -H 'auth: ${mcpApiKey}'`) }
+  if (hasKeys) { lines[lines.length - 1] += ' \\'; lines.push(`  -H 'auth: <your-api-key>'`) }
   lines[lines.length - 1] += ` \\`
   lines.push(`  -d '${body}'`)
   return lines.join('\n')
@@ -1303,10 +1458,10 @@ function FieldInput({ name, schema, value, required, onChange }: {
 
 // ─── Tool accordion ───────────────────────────────────────────────────────────
 
-function ToolAccordion({ tool: initialTool, projectId, mcpApiKey, onToolChanged, onEditEndpoint, onToolDeleted }: {
+function ToolAccordion({ tool: initialTool, projectId, anyApiKey, onToolChanged, onEditEndpoint, onToolDeleted }: {
   tool: GeneratedTool
   projectId: string
-  mcpApiKey?: string
+  anyApiKey?: string
   onToolChanged: (oldName: string, newTool: GeneratedTool) => void
   onEditEndpoint: (tool: GeneratedTool) => void
   onToolDeleted: (toolName: string) => void
@@ -1329,7 +1484,7 @@ function ToolAccordion({ tool: initialTool, projectId, mcpApiKey, onToolChanged,
   const allParams = parameterMap ?? []
   const paramEntries = Object.entries(properties)
   const curl = buildCurl(tool)
-  const mcpCurl = buildMcpCurl(tool, projectId, mcpApiKey)
+  const mcpCurl = buildMcpCurl(tool, projectId, !!anyApiKey)
 
   const saveToolMeta = async (field: 'name' | 'description', newValue: string) => {
     const oldName = tool.name
@@ -1382,7 +1537,7 @@ function ToolAccordion({ tool: initialTool, projectId, mcpApiKey, onToolChanged,
       }
       const payload = { jsonrpc: '2.0', method: 'tools/call', id: Date.now(), params: { name: tool.name, arguments: args } }
       const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }
-      if (mcpApiKey) headers['auth'] = mcpApiKey
+      if (anyApiKey) headers['auth'] = anyApiKey
       const res = await api.post(`/mcp/project/${projectId}`, payload, { headers })
       const rpc = parseMcpResponse(res.data)
       if (rpc?.error) { setResponse(JSON.stringify(rpc.error, null, 2)); setResponseIsError(true); return }
@@ -1736,6 +1891,8 @@ export default function ProjectDetail() {
   const [tab, setTab] = useState(0)
   const [toolSearch, setToolSearch] = useState('')
   const [toolMethodFilter, setToolMethodFilter] = useState<string | null>(null)
+  const [reimportOpen, setReimportOpen] = useState(false)
+  const [reimportSuccess, setReimportSuccess] = useState<{ added: number; updated: number } | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -1812,21 +1969,34 @@ export default function ProjectDetail() {
           <Box display="flex" gap={1} flexWrap="wrap" alignItems="flex-start">
             <Chip label={project.status === 'active' ? 'Active' : 'Error'} color={project.status === 'active' ? 'success' : 'error'} />
             {project.version && <Chip label={`v${project.version}`} variant="outlined" />}
+            <Tooltip title="Upload a new version of the API spec to update tools">
+              <Button size="small" variant="outlined" startIcon={<AutorenewIcon fontSize="small" />}
+                onClick={() => { setReimportOpen(true); setReimportSuccess(null) }}>
+                Re-import spec
+              </Button>
+            </Tooltip>
           </Box>
         </Box>
       </Paper>
+
+      {reimportSuccess && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setReimportSuccess(null)}>
+          Spec imported — <strong>{reimportSuccess.added}</strong> tool{reimportSuccess.added !== 1 ? 's' : ''} added,{' '}
+          <strong>{reimportSuccess.updated}</strong> updated.
+        </Alert>
+      )}
 
       {/* Base URL */}
       <BaseUrlPanel projectId={id!} initialValue={baseUrl} onChange={setBaseUrl} />
 
       {/* MCP endpoint */}
-      <McpEndpointBar projectId={id!} mcpApiKey={project.mcpApiKey} />
+      <McpEndpointBar projectId={id!} hasKeys={(project.mcpApiKeys ?? []).length > 0} />
 
-      {/* API Key */}
-      <ApiKeyPanel
+      {/* API Keys */}
+      <ApiKeysPanel
         projectId={id!}
-        initialKey={project.mcpApiKey}
-        onChange={(key) => setProject((prev) => prev ? { ...prev, mcpApiKey: key } : prev)}
+        initialKeys={project.mcpApiKeys ?? []}
+        onChange={(keys) => setProject((prev) => prev ? { ...prev, mcpApiKeys: keys } : prev)}
       />
 
       {/* Rate Limit */}
@@ -1941,7 +2111,7 @@ export default function ProjectDetail() {
                       key={tool.name}
                       tool={tool}
                       projectId={id!}
-                      mcpApiKey={project.mcpApiKey}
+                      anyApiKey={project.mcpApiKeys?.[0]?.key}
                       onToolChanged={handleToolChanged}
                       onEditEndpoint={handleOpenEdit}
                       onToolDeleted={handleDeleteTool}
@@ -2024,6 +2194,21 @@ export default function ProjectDetail() {
         projectId={id!}
         projectBaseUrl={baseUrl}
         editTool={editingTool}
+      />
+
+      <ReimportSpecDialog
+        projectId={id!}
+        open={reimportOpen}
+        onClose={() => setReimportOpen(false)}
+        onSuccess={(result) => {
+          setReimportOpen(false)
+          setReimportSuccess(result)
+          // Reload project to reflect added/updated tools
+          api.get<Project>(`/swagger/projects/${id}`).then((r) => {
+            setProject(r.data)
+            setBaseUrl(r.data.baseUrl)
+          })
+        }}
       />
     </Box>
   )

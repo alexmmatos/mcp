@@ -6,6 +6,13 @@ export type SwaggerProjectDocument = SwaggerProject & Document;
 
 export type { AuthConfig, EndpointRef, GeneratedTool, JsonSchema };
 
+export interface McpApiKeyEntry {
+  id: string;
+  name: string;
+  key: string;
+  createdAt: Date;
+}
+
 @Schema({ timestamps: true })
 export class SwaggerProject {
   @Prop({ required: true })
@@ -42,9 +49,13 @@ export class SwaggerProject {
   @Prop()
   errorMessage?: string;
 
-  /** Chave de autenticação para chamadas ao MCP server deste projeto */
+  /** Legacy: chave única. Mantido para backward-compat com projetos existentes. */
   @Prop()
   mcpApiKey?: string;
+
+  /** Multi-key: lista de chaves nomeadas (novo sistema) */
+  @Prop({ type: [Object], default: [] })
+  mcpApiKeys: McpApiKeyEntry[];
 
   /** Tags/categorias para filtragem na listagem */
   @Prop({ type: [String], default: [] })

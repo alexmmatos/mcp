@@ -121,7 +121,7 @@ function SidebarContent() {
       >
         <Box
           component="img"
-          src="/images/logos/dark-logo.svg"
+          src="/images/logos/arthur-mcp-adapter-logo.svg"
           alt="Arthur MCP Adapter"
           sx={{ height: 32, maxWidth: '100%' }}
           onError={(e) => {
