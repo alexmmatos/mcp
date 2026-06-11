@@ -22,6 +22,10 @@ import { LoggingModule } from './logging/logging.module';
 import { HealthModule } from './health/health.module';
 import { McpLoggingInterceptor } from './logging/mcp-logging.interceptor';
 import { McpExceptionFilter } from './common/filters/mcp-exception.filter';
+import { ExecutionLogsModule } from './execution-logs/execution-logs.module';
+import { AuditLogsModule } from './audit-logs/audit-logs.module';
+import { SettingsModule } from './settings/settings.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -46,6 +50,10 @@ import { McpExceptionFilter } from './common/filters/mcp-exception.filter';
     ResourcesModule,
     LoggingModule,
     HealthModule,
+    ExecutionLogsModule,
+    AuditLogsModule,
+    SettingsModule,
+    DashboardModule,
   ],
   providers: [
     {

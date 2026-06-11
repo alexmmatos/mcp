@@ -1,11 +1,17 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import Projects from './pages/Projects'
-import Upload from './pages/Upload'
+import NewProject from './pages/NewProject'
 import ProjectDetail from './pages/ProjectDetail'
 import McpServer from './pages/McpServer'
 import McpDocs from './pages/McpDocs'
+import Profile from './pages/Profile'
+import Dashboard from './pages/Dashboard'
+import Settings from './pages/Settings'
+import AuditLogs from './pages/AuditLogs'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -17,6 +23,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route
           path="/*"
           element={
@@ -24,10 +32,14 @@ export default function App() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<Projects />} />
-                  <Route path="/upload" element={<Upload />} />
+                  <Route path="/projects/new" element={<NewProject />} />
                   <Route path="/projects/:id" element={<ProjectDetail />} />
                   <Route path="/projects/:id/docs" element={<McpDocs />} />
                   <Route path="/mcp-server" element={<McpServer />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/audit-logs" element={<AuditLogs />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>

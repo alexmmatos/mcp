@@ -22,7 +22,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "test:e2e": "jest --config ./test/jest-e2e.json --forceExit"
+    "test:e2e": "jest --config ./test/jest-e2e.json --forceExit",
+    "kill:dev": "kill -9 $(lsof -t -i:3000)"
   },
   "dependencies": {
     "@apidevtools/swagger-parser": "^12.1.0",
@@ -35,12 +36,15 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
     "@rekog/mcp-nest": "1.9.10",
+    "@types/nodemailer": "^8.0.1",
     "axios": "^1.7.0",
     "bcryptjs": "^2.4.3",
     "hbs": "^4.2.1",
     "js-yaml": "^4.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.0.0",
+    "node-cache": "^5.1.2",
+    "nodemailer": "^8.0.11",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",

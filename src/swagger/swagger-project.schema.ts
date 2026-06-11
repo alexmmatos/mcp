@@ -41,6 +41,18 @@ export class SwaggerProject {
 
   @Prop()
   errorMessage?: string;
+
+  /** Chave de autenticação para chamadas ao MCP server deste projeto */
+  @Prop()
+  mcpApiKey?: string;
+
+  /** Tags/categorias para filtragem na listagem */
+  @Prop({ type: [String], default: [] })
+  tags: string[];
+
+  /** Rate limiting para chamadas ao MCP server deste projeto */
+  @Prop({ type: Object, default: { enabled: false, requestsPerMinute: 60 } })
+  rateLimit: { enabled: boolean; requestsPerMinute: number };
 }
 
 export const SwaggerProjectSchema = SchemaFactory.createForClass(SwaggerProject);

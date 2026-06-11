@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import {
   Alert,
   Box,
@@ -10,6 +10,7 @@ import {
   FormControlLabel,
   FormGroup,
   Grid,
+  Link,
   Stack,
   TextField,
   Typography,
@@ -35,7 +36,7 @@ export default function Login() {
       localStorage.setItem('token', res.data.access_token)
       navigate('/')
     } catch {
-      setError('Usuário ou senha inválidos.')
+      setError('Invalid username or password.')
     } finally {
       setLoading(false)
     }
@@ -89,21 +90,21 @@ export default function Login() {
               <Box
                 component="img"
                 src="/images/logos/dark-logo.svg"
-                alt="MCP Convert"
-                sx={{ height: 40 }}
+                alt="Arthur MCP Adapter"
+                sx={{ height: 36, maxWidth: '100%' }}
                 onError={(e) => {
                   const img = e.currentTarget as HTMLImageElement
                   img.style.display = 'none'
+                  img.nextElementSibling?.removeAttribute('style')
                 }}
               />
               <Typography
                 variant="h4"
                 fontWeight={700}
                 color="primary.main"
-                ml={1}
-                sx={{ letterSpacing: '-0.3px' }}
+                sx={{ display: 'none', letterSpacing: '-0.3px' }}
               >
-                MCP Convert
+                Arthur MCP Adapter
               </Typography>
             </Box>
 
@@ -113,7 +114,7 @@ export default function Login() {
               color="text.secondary"
               mb={3}
             >
-              Acesse o painel de controle
+              Sign in to your account
             </Typography>
 
             {error && (
@@ -133,7 +134,7 @@ export default function Login() {
                     display="block"
                     mb="5px"
                   >
-                    Usuário
+                    Username
                   </Typography>
                   <TextField
                     id="username"
@@ -156,7 +157,7 @@ export default function Login() {
                     display="block"
                     mb="5px"
                   >
-                    Senha
+                    Password
                   </Typography>
                   <TextField
                     id="password"
@@ -170,17 +171,16 @@ export default function Login() {
                   />
                 </Box>
 
-                <Stack
-                  justifyContent="space-between"
-                  direction="row"
-                  alignItems="center"
-                >
+                <Stack justifyContent="space-between" direction="row" alignItems="center">
                   <FormGroup>
                     <FormControlLabel
                       control={<Checkbox size="small" />}
-                      label={<Typography variant="body2">Lembrar acesso</Typography>}
+                      label={<Typography variant="body2">Remember me</Typography>}
                     />
                   </FormGroup>
+                  <Link component={RouterLink} to="/forgot-password" variant="body2">
+                    Forgot password
+                  </Link>
                 </Stack>
 
                 <Button
@@ -196,7 +196,7 @@ export default function Login() {
                   {loading ? (
                     <CircularProgress size={22} color="inherit" />
                   ) : (
-                    'Entrar'
+                    'Sign in'
                   )}
                 </Button>
               </Stack>

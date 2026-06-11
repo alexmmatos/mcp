@@ -32,6 +32,9 @@ import {
   IconBook,
   IconLogout,
   IconUser,
+  IconLayoutDashboard,
+  IconSettings,
+  IconClipboardList,
 } from '@tabler/icons-react'
 import api from '../api'
 
@@ -39,16 +42,28 @@ const SIDEBAR_WIDTH = 270
 
 const NAV_SECTIONS = [
   {
-    subheader: 'PRINCIPAL',
+    subheader: 'OVERVIEW',
     items: [
-      { title: 'Projetos', icon: IconFolder, path: '/' },
-      { title: 'Upload', icon: IconUpload, path: '/upload' },
+      { title: 'Dashboard', icon: IconLayoutDashboard, path: '/dashboard' },
     ],
   },
   {
-    subheader: 'SERVIDOR',
+    subheader: 'MAIN',
     items: [
-      { title: 'Servidor MCP', icon: IconServer, path: '/mcp-server' },
+      { title: 'Projects', icon: IconFolder, path: '/' },
+    ],
+  },
+  {
+    subheader: 'SERVER',
+    items: [
+      { title: 'MCP Server', icon: IconServer, path: '/mcp-server' },
+    ],
+  },
+  {
+    subheader: 'ADMINISTRATION',
+    items: [
+      { title: 'Settings', icon: IconSettings, path: '/settings' },
+      { title: 'Audit Logs', icon: IconClipboardList, path: '/audit-logs' },
     ],
   },
 ]
@@ -107,21 +122,21 @@ function SidebarContent() {
         <Box
           component="img"
           src="/images/logos/dark-logo.svg"
-          alt="MCP Convert"
-          sx={{ height: 38 }}
+          alt="Arthur MCP Adapter"
+          sx={{ height: 32, maxWidth: '100%' }}
           onError={(e) => {
             const img = e.currentTarget as HTMLImageElement
             img.style.display = 'none'
+            img.nextElementSibling?.removeAttribute('style')
           }}
         />
         <Typography
-          variant="h5"
+          variant="h6"
           fontWeight={700}
           color="primary.main"
-          ml={1}
-          sx={{ letterSpacing: '-0.3px' }}
+          sx={{ display: 'none', letterSpacing: '-0.3px' }}
         >
-          MCP Convert
+          Arthur MCP Adapter
         </Typography>
       </Box>
 
@@ -201,10 +216,10 @@ function SidebarContent() {
         >
           <Box>
             <Typography variant="h6" fontSize="0.875rem" mb={0.5}>
-              MCP Protocol
+              Arthur MCP Adapter
             </Typography>
             <Typography variant="body2" color="text.secondary" fontSize="0.75rem">
-              Conecte sua IA às suas APIs
+              Connect your AI to your APIs
             </Typography>
           </Box>
           <Box
@@ -344,16 +359,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               transformOrigin={{ horizontal: 'right', vertical: 'top' }}
               PaperProps={{ sx: { width: 200, mt: 0.5 } }}
             >
-              <MenuItem onClick={() => setProfileAnchor(null)}>
+              <MenuItem onClick={() => { setProfileAnchor(null); navigate('/profile') }}>
                 <ListItemIcon><IconUser size={18} /></ListItemIcon>
-                <ListItemText>Meu perfil</ListItemText>
+                <ListItemText>My Profile</ListItemText>
               </MenuItem>
               <MenuItem
                 onClick={() => { setProfileAnchor(null); handleLogout() }}
                 sx={{ color: 'error.main' }}
               >
                 <ListItemIcon sx={{ color: 'error.main' }}><IconLogout size={18} /></ListItemIcon>
-                <ListItemText>Sair</ListItemText>
+                <ListItemText>Logout</ListItemText>
               </MenuItem>
             </Menu>
           </ToolbarStyled>

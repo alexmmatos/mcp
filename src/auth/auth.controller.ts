@@ -26,4 +26,24 @@ export class AuthController {
     const { username, email, password } = RegisterSchema.parse(body);
     return this.authService.register(username, password, email);
   }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  async forgotPassword(@Body('email') email: string): Promise<{ message: string }> {
+    if (!email) throw new Error('E-mail é obrigatório.');
+    await this.authService.forgotPassword(email);
+    return { message: 'Se o e-mail estiver cadastrado, você receberá as instruções em breve.' };
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  async resetPassword(
+    @Body('token') token: string,
+    @Body('newPassword') newPassword: string,
+  ): Promise<{ message: string }> {
+    if (!token || !newPassword) throw new Error('Token e nova senha são obrigatórios.');
+    if (newPassword.length < 6) throw new Error('A senha deve ter no mínimo 6 caracteres.');
+    await this.authService.resetPassword(token, newPassword);
+    return { message: 'Senha redefinida com sucesso.' };
+  }
 }

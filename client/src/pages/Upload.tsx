@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import api from '../api'
+import HelpButton from '../components/HelpButton'
 
 type Phase = 'idle' | 'uploading' | 'success' | 'error'
 
@@ -77,9 +78,35 @@ export default function Upload() {
 
   return (
     <Box p={3} maxWidth={640} mx="auto">
-      <Typography variant="h5" fontWeight="bold" mb={3}>
-        Upload de API
-      </Typography>
+      <Box display="flex" alignItems="center" gap={1} mb={3}>
+        <Typography variant="h5" fontWeight="bold">API Upload</Typography>
+        <HelpButton title="API Upload">
+          <Typography variant="body2" gutterBottom>
+            The API Upload page lets you create a fully configured MCP project by importing an existing API definition file, instead of creating tools one by one by hand.
+          </Typography>
+          <Typography variant="body2" gutterBottom>
+            <strong>How to use it:</strong>
+          </Typography>
+          <Box component="ol" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
+            <Box component="li"><Typography variant="body2">Drop your file (or click to browse). Supported: <strong>OpenAPI 3.x</strong> and <strong>Swagger 2.0</strong> in .yaml, .yml, or .json format.</Typography></Box>
+            <Box component="li"><Typography variant="body2">Optionally enter a <strong>Base URL override</strong>. Use this when the spec declares a staging URL but you want to point Arthur at production.</Typography></Box>
+            <Box component="li"><Typography variant="body2">Click <strong>Upload</strong>. Arthur reads every path and operation in the spec, creates a project, and generates one tool per endpoint.</Typography></Box>
+            <Box component="li"><Typography variant="body2">When the import succeeds, click <strong>View project</strong> to review the generated tools.</Typography></Box>
+          </Box>
+          <Typography variant="body2" gutterBottom>
+            <strong>What Arthur generates from the spec:</strong>
+          </Typography>
+          <Box component="ul" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
+            <Box component="li"><Typography variant="body2">A project named after the spec's <code>info.title</code>.</Typography></Box>
+            <Box component="li"><Typography variant="body2">One tool per operation, named from the <code>operationId</code> (or derived from method + path).</Typography></Box>
+            <Box component="li"><Typography variant="body2">Tool descriptions from the operation's <code>summary</code> and <code>description</code> fields.</Typography></Box>
+            <Box component="li"><Typography variant="body2">Input parameters (path, query, body) mapped to the MCP tool's parameter schema.</Typography></Box>
+          </Box>
+          <Typography variant="body2">
+            <strong>Tip:</strong> The richer your spec's descriptions, the better the AI will understand when and how to use each tool. After import you can edit any tool individually from the project's Tools tab.
+          </Typography>
+        </HelpButton>
+      </Box>
 
       {/* Drop zone */}
       <Paper
@@ -115,9 +142,9 @@ export default function Upload() {
           <Typography fontWeight="bold">{file.name}</Typography>
         ) : (
           <>
-            <Typography>Arraste seu arquivo Swagger / OpenAPI aqui</Typography>
+            <Typography>Drag your Swagger / OpenAPI file here</Typography>
             <Typography variant="body2" color="text.secondary">
-              ou clique para selecionar (.yaml, .yml, .json)
+              or click to select (.yaml, .yml, .json)
             </Typography>
           </>
         )}
@@ -125,13 +152,13 @@ export default function Upload() {
 
       {/* Optional base URL */}
       <TextField
-        label="Base URL (opcional)"
-        placeholder="https://api.exemplo.com"
+        label="Base URL (optional)"
+        placeholder="https://api.example.com"
         fullWidth
         value={baseUrl}
         onChange={(e) => setBaseUrl(e.target.value)}
         sx={{ mt: 2 }}
-        helperText="Sobrepõe a URL base do spec"
+        helperText="Overrides the spec base URL"
       />
 
       <Button
@@ -143,7 +170,7 @@ export default function Upload() {
         onClick={handleSubmit}
         startIcon={phase === 'uploading' ? <CircularProgress size={18} color="inherit" /> : undefined}
       >
-        {phase === 'uploading' ? 'Processando…' : 'Enviar'}
+        {phase === 'uploading' ? 'Processing…' : 'Upload'}
       </Button>
 
       {phase === 'error' && (
@@ -162,13 +189,12 @@ export default function Upload() {
               size="small"
               onClick={() => navigate(`/projects/${result._id}`)}
             >
-              Ver projeto
+              View project
             </Button>
           }
         >
-          <strong>{result.name}</strong> importado com sucesso —{' '}
-          {result.tools.length} ferramenta{result.tools.length !== 1 ? 's' : ''} gerada
-          {result.tools.length !== 1 ? 's' : ''}.
+          <strong>{result.name}</strong> imported successfully —{' '}
+          {result.tools.length} tool{result.tools.length !== 1 ? 's' : ''} generated.
         </Alert>
       )}
     </Box>

@@ -77,7 +77,7 @@ export default function McpConfig() {
     api
       .get<DocsData>('/mcp-docs/json')
       .then((res) => setData(res.data))
-      .catch(() => setError('Não foi possível carregar as informações do servidor MCP.'))
+      .catch(() => setError('Unable to load MCP server information.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -92,7 +92,7 @@ export default function McpConfig() {
   if (error || !data) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Alert severity="error">{error ?? 'Erro desconhecido.'}</Alert>
+        <Alert severity="error">{error ?? 'Unknown error.'}</Alert>
       </Container>
     )
   }
@@ -140,7 +140,7 @@ export default function McpConfig() {
                   {tool.description}
                 </Typography>
                 <Chip
-                  label={tool.hasParams ? `${tool.params.length} params` : 'sem params'}
+                  label={tool.hasParams ? `${tool.params.length} params` : 'no params'}
                   size="small"
                   color={tool.hasParams ? 'primary' : 'default'}
                   variant="outlined"
@@ -151,16 +151,16 @@ export default function McpConfig() {
               {tool.hasParams && (
                 <>
                   <Typography variant="subtitle2" gutterBottom>
-                    Parâmetros
+                    Parameters
                   </Typography>
                   <TableContainer component={Paper} variant="outlined" sx={{ mb: 3 }}>
                     <Table size="small">
                       <TableHead sx={{ bgcolor: '#f5f5f5' }}>
                         <TableRow>
-                          <TableCell sx={{ fontWeight: 'bold' }}>Nome</TableCell>
-                          <TableCell sx={{ fontWeight: 'bold' }}>Tipo</TableCell>
-                          <TableCell sx={{ fontWeight: 'bold' }}>Obrigatório</TableCell>
-                          <TableCell sx={{ fontWeight: 'bold' }}>Descrição</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Required</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Description</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -194,7 +194,7 @@ export default function McpConfig() {
                 </>
               )}
               <Typography variant="subtitle2" gutterBottom>
-                Exemplo cURL
+                cURL Example
               </Typography>
               <Box
                 component="pre"
