@@ -5,7 +5,7 @@ export interface McpToolResult {
   isError?: boolean;
 }
 
-const MAX_LEN = 50_000;
+const MAX_LEN = 5000;
 
 export function mapResponse(response: HttpResponse): McpToolResult {
   if (response.status >= 400) {

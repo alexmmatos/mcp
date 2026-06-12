@@ -407,7 +407,7 @@ function McpEndpointBar({ projectId, hasKeys }: { projectId: string; hasKeys: bo
     <Paper variant="outlined" sx={{ p: 2.5, mb: 2 }}>
       <Box display="flex" alignItems="center" gap={1} mb={1.5}>
         <HttpIcon color="primary" fontSize="small" />
-        <Typography variant="subtitle1" fontWeight={700} flexGrow={1}>MCP Endpoint</Typography>
+        <Typography variant="subtitle1" fontWeight={700} flexGrow={1}>Connection URL</Typography>
         <Tooltip title="Share setup instructions with a client">
           <Button size="small" variant="outlined" startIcon={<ShareIcon fontSize="small" />} onClick={handleShareOpen}>
             Share with client
@@ -577,18 +577,17 @@ function ApiKeysPanel({ projectId, initialKeys, onChange }: {
           ? <LockIcon color="success" fontSize="small" />
           : <LockOpenIcon color="disabled" fontSize="small" />}
         <Box display="flex" alignItems="center" gap={0.5} flexGrow={1}>
-          <Typography variant="subtitle1" fontWeight={700}>MCP Authentication</Typography>
-          <HelpButton title="MCP Authentication">
+          <Typography variant="subtitle1" fontWeight={700}>Access Keys</Typography>
+          <HelpButton title="Access Keys">
             <Typography variant="body2" gutterBottom>
-              Named API keys that control who can access this project's MCP endpoint.
-              Every client request must include <code>auth: &lt;key&gt;</code> — requests without a valid key return HTTP 401.
+              Named keys that control who can connect to this project's AI endpoint.
+              Every client must include <code>auth: &lt;key&gt;</code> in their configuration — requests without a valid key are rejected.
             </Typography>
             <Typography variant="body2" gutterBottom>
-              Use <strong>multiple keys</strong> to give different clients independent credentials:
-              you can rotate or revoke one key without affecting others.
+              Create <strong>one key per client</strong> (e.g. "Claude Desktop", "Cursor") so you can revoke access for a single client without affecting others.
             </Typography>
             <Typography variant="body2">
-              Without any key configured, the endpoint is <strong>publicly accessible</strong> to anyone who knows the URL.
+              Without any key, the endpoint is <strong>publicly accessible</strong> to anyone who knows the URL.
             </Typography>
           </HelpButton>
         </Box>
@@ -921,8 +920,8 @@ function RateLimitPanel({ projectId, initialRateLimit, onChange }: RateLimitPane
       <Box flex={1} minWidth={0}>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
           <Box display="flex" alignItems="center" gap={0.5}>
-            <Typography variant="subtitle2" fontWeight={700}>Rate Limiting</Typography>
-            <HelpButton title="Rate Limiting">
+            <Typography variant="subtitle2" fontWeight={700}>Request Limit</Typography>
+            <HelpButton title="Request Limit">
               <Typography variant="body2" gutterBottom>
                 Caps the number of MCP requests this project accepts per minute. When the limit is exceeded, the server responds with <strong>HTTP 429 (Too Many Requests)</strong> and a <code>Retry-After</code> header — the AI client should wait before retrying.
               </Typography>
@@ -1085,7 +1084,7 @@ function AuthConfigPanel({ projectId, initialAuth, onChange }: {
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
         <Box display="flex" alignItems="center" gap={1}>
           <VpnKeyIcon fontSize="small" sx={{ color: authType !== 'none' ? 'primary.main' : 'text.disabled' }} />
-          <Typography variant="subtitle2" fontWeight={700}>API Authentication</Typography>
+          <Typography variant="subtitle2" fontWeight={700}>API Credentials</Typography>
           {authType !== 'none' && (
             <Chip label={AUTH_TYPE_LABELS[authType]} size="small" color="primary" sx={{ fontSize: '0.7rem', height: 20 }} />
           )}
@@ -1983,12 +1982,13 @@ function ToolAccordion({ tool: initialTool, projectId, anyApiKey, onToolChanged,
           <Typography fontFamily="monospace" fontSize="0.78rem" color="text.secondary" noWrap flexGrow={1}>{path}</Typography>
 
           {/* Toggle enable/disable */}
-          <Tooltip title={isDisabled ? 'Enable tool' : 'Disable tool'}>
-            <IconButton size="small" onClick={handleToggle}
-              sx={{ flexShrink: 0, color: isDisabled ? 'text.disabled' : 'text.secondary',
-                '&:hover': { color: isDisabled ? 'success.main' : 'warning.main' } }}>
-              {isDisabled ? <VisibilityIcon sx={{ fontSize: 18 }} /> : <VisibilityOffIcon sx={{ fontSize: 18 }} />}
-            </IconButton>
+          <Tooltip title={isDisabled ? 'Enable — make this tool available to the AI' : 'Disable — hide this tool from the AI'}>
+            <Switch
+              size="small"
+              checked={!isDisabled}
+              onClick={handleToggle}
+              sx={{ flexShrink: 0 }}
+            />
           </Tooltip>
 
           {/* Edit endpoint button */}
@@ -2343,14 +2343,23 @@ export default function ProjectDetail() {
     return acc
   }, {})
 
+  const availableMethods = Object.keys(methodCounts)
+  const visibleTools = (project.tools ?? []).filter((t) => {
+    const matchSearch = !toolSearch
+      || t.name.toLowerCase().includes(toolSearch.toLowerCase())
+      || (t.description ?? '').toLowerCase().includes(toolSearch.toLowerCase())
+    const matchMethod = !toolMethodFilter || t.endpointRef?.method === toolMethodFilter
+    return matchSearch && matchMethod
+  })
+
   return (
     <Box p={3}>
       {/* Nav */}
-      <Box mb={3}>
+      <Box mb={2}>
         <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/')}>Projects</Button>
       </Box>
 
-      {/* Header */}
+      {/* Header — always visible */}
       <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
           <Box minWidth={0} flexGrow={1}>
@@ -2358,7 +2367,7 @@ export default function ProjectDetail() {
               placeholder="Project name" fontSize="1.5rem" fontWeight={700} />
             <Box mt={0.75}>
               <InlineEdit value={project.description ?? ''} onSave={(v) => saveProjectInfo('description', v)}
-                multiline placeholder="Project description…" emptyLabel="Add description…"
+                multiline placeholder="Add a short description…" emptyLabel="Add a short description…"
                 fontSize="0.875rem" color="text.secondary" />
             </Box>
           </Box>
@@ -2367,10 +2376,10 @@ export default function ProjectDetail() {
               ? <Chip label="Paused" icon={<PauseIcon fontSize="small" />} sx={{ bgcolor: '#ff9800', color: '#fff' }} />
               : <Chip label={project.status === 'active' ? 'Active' : 'Error'} color={project.status === 'active' ? 'success' : 'error'} />}
             {project.version && <Chip label={`v${project.version}`} variant="outlined" />}
-            <Tooltip title="Upload a new version of the API spec to update tools">
+            <Tooltip title="Upload a new version of the spec to add or update tools">
               <Button size="small" variant="outlined" startIcon={<AutorenewIcon fontSize="small" />}
                 onClick={() => { setReimportOpen(true); setReimportSuccess(null) }}>
-                Re-import spec
+                Update tools from spec
               </Button>
             </Tooltip>
           </Box>
@@ -2379,221 +2388,174 @@ export default function ProjectDetail() {
 
       {reimportSuccess && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setReimportSuccess(null)}>
-          Spec imported — <strong>{reimportSuccess.added}</strong> tool{reimportSuccess.added !== 1 ? 's' : ''} added,{' '}
+          Done — <strong>{reimportSuccess.added}</strong> tool{reimportSuccess.added !== 1 ? 's' : ''} added,{' '}
           <strong>{reimportSuccess.updated}</strong> updated.
         </Alert>
       )}
 
-      {/* Base URL */}
-      <BaseUrlPanel projectId={id!} initialValue={baseUrl} onChange={setBaseUrl} />
-
-      {/* MCP endpoint */}
-      <McpEndpointBar projectId={id!} hasKeys={(project.mcpApiKeys ?? []).length > 0} />
-
-      {/* API Keys */}
-      <ApiKeysPanel
-        projectId={id!}
-        initialKeys={project.mcpApiKeys ?? []}
-        onChange={(keys) => setProject((prev) => prev ? { ...prev, mcpApiKeys: keys } : prev)}
-      />
-
-      {/* Rate Limit */}
-      <RateLimitPanel
-        projectId={id!}
-        initialRateLimit={project.rateLimit}
-        onChange={(rl) => setProject((prev) => prev ? { ...prev, rateLimit: rl } : prev)}
-      />
-
-      {/* Auth config */}
-      <AuthConfigPanel
-        projectId={id!}
-        initialAuth={project.auth}
-        onChange={(auth) => setProject((prev) => prev ? { ...prev, auth } : prev)}
-      />
-
-      {/* Project controls: pause / maintenance / availability */}
-      <ProjectControlsPanel
-        projectId={id!}
-        initialPaused={project.isPaused}
-        initialMaintenance={project.maintenanceMode}
-        initialAvailability={project.availabilityWindow}
-        onPausedChange={setIsPaused}
-      />
-
-      {/* Alert config */}
-      <AlertConfigPanel projectId={id!} initialConfig={project.alertConfig} />
-
       {/* Tabs */}
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tab icon={<BuildIcon fontSize="small" />} iconPosition="start" label="Tools" />
-        <Tab icon={<MenuBookIcon fontSize="small" />} iconPosition="start" label="MCP Docs" />
-        <Tab icon={<AssessmentIcon fontSize="small" />} iconPosition="start" label="Logs" />
+        <Tab icon={<HttpIcon fontSize="small" />} iconPosition="start" label="Connect" />
+        <Tab icon={<BuildIcon fontSize="small" />} iconPosition="start"
+          label={`Tools${project.tools.length > 0 ? ` (${project.tools.length})` : ''}`} />
+        <Tab icon={<TuneIcon fontSize="small" />} iconPosition="start" label="Settings" />
+        <Tab icon={<AssessmentIcon fontSize="small" />} iconPosition="start" label="Activity" />
+        <Tab icon={<MenuBookIcon fontSize="small" />} iconPosition="start" label="AI View" />
       </Tabs>
 
-      {/* Tab 0 — Tools */}
-      {tab === 0 && (() => {
-        const availableMethods = Object.keys(methodCounts)
-        const visibleTools = (project.tools ?? []).filter((t) => {
-          const matchSearch = !toolSearch
-            || t.name.toLowerCase().includes(toolSearch.toLowerCase())
-            || (t.description ?? '').toLowerCase().includes(toolSearch.toLowerCase())
-          const matchMethod = !toolMethodFilter || t.endpointRef?.method === toolMethodFilter
-          return matchSearch && matchMethod
-        })
-        return (
-          <>
-            {/* Stats */}
-            <Grid container spacing={2} mb={3}>
-              <Grid item xs={6} sm={3}>
-                <StatCard label="Tools" value={project.tools.length} color="#5D87FF" />
-              </Grid>
-              {Object.entries(methodCounts).map(([method, count]) => (
-                <Grid item xs={6} sm={3} key={method}>
-                  <StatCard label={method} value={count} color={METHOD_COLOR[method]} />
-                </Grid>
-              ))}
-            </Grid>
-
-            {/* Tools header + filter */}
-            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5} flexWrap="wrap" gap={1}>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Typography variant="h6" fontWeight={700}>MCP Tools</Typography>
-                <HelpButton title="MCP Tools">
-                  <Typography variant="body2" gutterBottom>
-                    Each tool maps one API endpoint to a named, callable MCP function. When an AI client (Claude Desktop, Cursor, etc.) invokes a tool, Arthur translates the call into an HTTP request to the upstream API and returns the response.
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>How the AI uses tools:</strong> when the AI connects to the MCP endpoint, it receives a list of all tools with their names, descriptions, and parameter schemas. Based on what the user asks, the AI decides which tool to call and which parameters to pass. It never sees the underlying HTTP method, URL, or authentication — that is all handled by Arthur.
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Creating tools:</strong>
-                  </Typography>
-                  <Box component="ul" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
-                    <Box component="li"><Typography variant="body2"><strong>Automatically:</strong> upload an OpenAPI/Swagger spec from the Upload page and all endpoints become tools instantly.</Typography></Box>
-                    <Box component="li"><Typography variant="body2"><strong>Manually:</strong> click <strong>New tool</strong> and fill in the HTTP method, path, parameters, and description.</Typography></Box>
-                  </Box>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Tips for better AI performance:</strong> write clear, specific tool descriptions. Instead of "Get user", write "Fetch a user account by its numeric ID — returns name, email, role, and account status." The AI reads these descriptions to decide when to call each tool.
-                  </Typography>
-                  <Typography variant="body2">
-                    Use the search box to filter by name or description. The method chips (GET, POST…) filter by HTTP verb — useful when you have many tools and want to focus on read-only or write operations.
-                  </Typography>
-                </HelpButton>
-              </Box>
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate} size="small">New tool</Button>
-            </Box>
-
-            <Box display="flex" alignItems="center" gap={1} mb={2} flexWrap="wrap">
-              <TextField
-                size="small" placeholder="Search tools..." value={toolSearch}
-                onChange={(e) => setToolSearch(e.target.value)} sx={{ width: 220 }}
-                InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" color="action" /></InputAdornment> }}
-              />
-              {availableMethods.length > 1 && (
-                <Box display="flex" gap={0.5} flexWrap="wrap" alignItems="center">
-                  <Chip label="All" size="small" clickable onClick={() => setToolMethodFilter(null)}
-                    color={toolMethodFilter === null ? 'primary' : 'default'}
-                    variant={toolMethodFilter === null ? 'filled' : 'outlined'} />
-                  {availableMethods.map((m) => (
-                    <Chip key={m} label={m} size="small" clickable
-                      onClick={() => setToolMethodFilter(toolMethodFilter === m ? null : m)}
-                      sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.7rem',
-                        bgcolor: toolMethodFilter === m ? METHOD_COLOR[m] : 'transparent',
-                        color: toolMethodFilter === m ? '#fff' : METHOD_COLOR[m],
-                        borderColor: METHOD_COLOR[m] }}
-                      variant="outlined" />
-                  ))}
-                </Box>
-              )}
-              {(toolSearch || toolMethodFilter) && (
-                <Typography variant="body2" color="text.secondary" ml="auto">
-                  {visibleTools.length} / {project.tools.length}
-                </Typography>
-              )}
-            </Box>
-
-            {project.tools.length === 0
-              ? <Alert severity="warning">No tools yet. Click "New tool" to create one.</Alert>
-              : visibleTools.length === 0
-                ? <Alert severity="info">No tools match the filter.</Alert>
-                : visibleTools.map((tool) => (
-                    <ToolAccordion
-                      key={tool.name}
-                      tool={tool}
-                      projectId={id!}
-                      anyApiKey={project.mcpApiKeys?.[0]?.key}
-                      onToolChanged={handleToolChanged}
-                      onEditEndpoint={handleOpenEdit}
-                      onToolDeleted={handleDeleteTool}
-                    />
-                  ))}
-          </>
-        )
-      })()}
-
-      {/* Tab 1 — Documentation */}
-      {tab === 1 && (
+      {/* ── Tab 0: Connect ─────────────────────────────────────────────────────── */}
+      {tab === 0 && (
         <>
-          <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <Typography variant="h6" fontWeight={700}>MCP Documentation</Typography>
-            <HelpButton title="MCP Documentation">
-              <Typography variant="body2" gutterBottom>
-                An auto-generated reference for every tool in this project, formatted the way MCP clients see it. This is what Claude Desktop, Cursor, or any other AI tool receives when it first connects and asks "what can you do?"
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>What it shows per tool:</strong>
-              </Typography>
-              <Box component="ul" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
-                <Box component="li"><Typography variant="body2"><strong>Tool name:</strong> the identifier the AI uses in its JSON-RPC call.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Description:</strong> what the tool does (taken from the tool definition). The AI reads this to decide when to call the tool.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Parameters:</strong> each input the tool accepts — name, type, whether it's required, and a description of what it should contain.</Typography></Box>
-              </Box>
-              <Typography variant="body2" gutterBottom>
-                <strong>Why this matters:</strong> MCP clients never see the underlying HTTP method or URL — only this documentation. If a tool is being called incorrectly or not at all, check this tab to see exactly what the AI is reading and whether the descriptions and parameter names make it obvious how to use the tool.
-              </Typography>
-              <Typography variant="body2">
-                Use the search box at the top to filter tools by name or description. Expand any card to see the full parameter schema.
-              </Typography>
-            </HelpButton>
-          </Box>
-          <McpDocsContent project={project} projectId={id!} />
+          <McpEndpointBar projectId={id!} hasKeys={(project.mcpApiKeys ?? []).length > 0} />
+          <ApiKeysPanel
+            projectId={id!}
+            initialKeys={project.mcpApiKeys ?? []}
+            onChange={(keys) => setProject((prev) => prev ? { ...prev, mcpApiKeys: keys } : prev)}
+          />
         </>
       )}
 
-      {/* Tab 2 — Logs */}
+      {/* ── Tab 1: Tools ──────────────────────────────────────────────────────── */}
+      {tab === 1 && (
+        <>
+          <Grid container spacing={2} mb={3}>
+            <Grid item xs={6} sm={3}>
+              <StatCard label="Total tools" value={project.tools.length} color="#5D87FF" />
+            </Grid>
+            {Object.entries(methodCounts).map(([method, count]) => (
+              <Grid item xs={6} sm={3} key={method}>
+                <StatCard label={method} value={count} color={METHOD_COLOR[method]} />
+              </Grid>
+            ))}
+          </Grid>
+
+          <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5} flexWrap="wrap" gap={1}>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="h6" fontWeight={700}>What your AI can do</Typography>
+              <HelpButton title="Tools">
+                <Typography variant="body2" gutterBottom>
+                  Each tool is one specific action your AI can take — like "search for a contact", "create a ticket", or "get project status". The AI reads all the descriptions here and decides which tool to use based on what you ask it.
+                </Typography>
+                <Typography variant="body2" gutterBottom>
+                  <strong>Better descriptions = better AI.</strong> Instead of "Get user", write "Fetch a user account by ID — returns name, email, role, and status." The more specific, the more reliably the AI will use it correctly.
+                </Typography>
+                <Typography variant="body2">
+                  Use <strong>Disable</strong> to hide a tool from the AI without deleting it. Useful when an endpoint is temporarily unavailable.
+                </Typography>
+              </HelpButton>
+            </Box>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenCreate} size="small">
+              Add tool
+            </Button>
+          </Box>
+
+          <Box display="flex" alignItems="center" gap={1} mb={2} flexWrap="wrap">
+            <TextField
+              size="small" placeholder="Search by name or description…" value={toolSearch}
+              onChange={(e) => setToolSearch(e.target.value)} sx={{ width: 260 }}
+              InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" color="action" /></InputAdornment> }}
+            />
+            {availableMethods.length > 1 && (
+              <Box display="flex" gap={0.5} flexWrap="wrap" alignItems="center">
+                <Chip label="All" size="small" clickable onClick={() => setToolMethodFilter(null)}
+                  color={toolMethodFilter === null ? 'primary' : 'default'}
+                  variant={toolMethodFilter === null ? 'filled' : 'outlined'} />
+                {availableMethods.map((m) => (
+                  <Chip key={m} label={m} size="small" clickable
+                    onClick={() => setToolMethodFilter(toolMethodFilter === m ? null : m)}
+                    sx={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.7rem',
+                      bgcolor: toolMethodFilter === m ? METHOD_COLOR[m] : 'transparent',
+                      color: toolMethodFilter === m ? '#fff' : METHOD_COLOR[m],
+                      borderColor: METHOD_COLOR[m] }}
+                    variant="outlined" />
+                ))}
+              </Box>
+            )}
+            {(toolSearch || toolMethodFilter) && (
+              <Typography variant="body2" color="text.secondary" ml="auto">
+                {visibleTools.length} of {project.tools.length}
+              </Typography>
+            )}
+          </Box>
+
+          {project.tools.length === 0
+            ? <Alert severity="info">No tools yet. Click "Add tool" to create one, or use "Update tools from spec" to import from an OpenAPI file.</Alert>
+            : visibleTools.length === 0
+              ? <Alert severity="info">No tools match your search.</Alert>
+              : visibleTools.map((tool) => (
+                  <ToolAccordion
+                    key={tool.name}
+                    tool={tool}
+                    projectId={id!}
+                    anyApiKey={project.mcpApiKeys?.[0]?.key}
+                    onToolChanged={handleToolChanged}
+                    onEditEndpoint={handleOpenEdit}
+                    onToolDeleted={handleDeleteTool}
+                  />
+                ))}
+        </>
+      )}
+
+      {/* ── Tab 2: Settings ───────────────────────────────────────────────────── */}
       {tab === 2 && (
         <>
+          <BaseUrlPanel projectId={id!} initialValue={baseUrl} onChange={setBaseUrl} />
+          <AuthConfigPanel
+            projectId={id!}
+            initialAuth={project.auth}
+            onChange={(auth) => setProject((prev) => prev ? { ...prev, auth } : prev)}
+          />
+          <RateLimitPanel
+            projectId={id!}
+            initialRateLimit={project.rateLimit}
+            onChange={(rl) => setProject((prev) => prev ? { ...prev, rateLimit: rl } : prev)}
+          />
+          <ProjectControlsPanel
+            projectId={id!}
+            initialPaused={project.isPaused}
+            initialMaintenance={project.maintenanceMode}
+            initialAvailability={project.availabilityWindow}
+            onPausedChange={setIsPaused}
+          />
+          <AlertConfigPanel projectId={id!} initialConfig={project.alertConfig} />
+        </>
+      )}
+
+      {/* ── Tab 3: Activity ───────────────────────────────────────────────────── */}
+      {tab === 3 && (
+        <>
           <Box display="flex" alignItems="center" gap={1} mb={2}>
-            <Typography variant="h6" fontWeight={700}>Execution Logs</Typography>
-            <HelpButton title="Execution Logs">
+            <Typography variant="h6" fontWeight={700}>Activity Log</Typography>
+            <HelpButton title="Activity Log">
               <Typography variant="body2" gutterBottom>
-                A real-time record of every tool call made through this project's MCP endpoint. Each row represents one complete request-response cycle between an AI client and the upstream API.
+                Every request your AI made through this project, in order. Each row is one action — the tool used, whether it succeeded, and how long it took.
               </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>What each log entry contains:</strong>
-              </Typography>
-              <Box component="ul" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
-                <Box component="li"><Typography variant="body2"><strong>Tool name:</strong> which tool the AI client invoked.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Source:</strong> whether the call came from an MCP client or was triggered directly.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Status code:</strong> the HTTP status returned by the upstream API (200 = success, 4xx = client error, 5xx = server error).</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Response time:</strong> how long the upstream API took to respond, in milliseconds.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Error flag:</strong> whether the call was classified as an error.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Timestamp:</strong> when the call occurred.</Typography></Box>
-              </Box>
-              <Typography variant="body2" gutterBottom>
-                <strong>How to use this tab:</strong>
-              </Typography>
-              <Box component="ul" sx={{ mt: 0, mb: 1, pl: 2.5 }}>
-                <Box component="li"><Typography variant="body2"><strong>Debug failures:</strong> find error rows and check the status code and error message to understand why a call failed.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Monitor latency:</strong> if response times are growing, the upstream API may be under load or the request parameters may be causing expensive queries.</Typography></Box>
-                <Box component="li"><Typography variant="body2"><strong>Understand usage:</strong> see which tools your AI clients call most often and at what times.</Typography></Box>
+              <Box component="ul" sx={{ mt: 0.5, mb: 1, pl: 2.5 }}>
+                <Box component="li"><Typography variant="body2"><strong>Green status</strong> — request succeeded.</Typography></Box>
+                <Box component="li"><Typography variant="body2"><strong>Red status</strong> — something went wrong. Check the error column for details.</Typography></Box>
+                <Box component="li"><Typography variant="body2"><strong>Response time</strong> — how long the external API took to reply. Over 3s turns orange.</Typography></Box>
               </Box>
               <Typography variant="body2">
-                Logs are stored in memory and kept for <strong>7 days</strong>. They are cleared when the server restarts. For permanent audit trails, use the Audit Logs page.
+                Logs are kept for 7 days. They reset when the server restarts.
               </Typography>
             </HelpButton>
           </Box>
           <ProjectLogs projectId={id!} />
+        </>
+      )}
+
+      {/* ── Tab 4: AI View ────────────────────────────────────────────────────── */}
+      {tab === 4 && (
+        <>
+          <Box display="flex" alignItems="center" gap={1} mb={2}>
+            <Typography variant="h6" fontWeight={700}>What your AI sees</Typography>
+            <HelpButton title="What your AI sees">
+              <Typography variant="body2">
+                This is the exact list of tools and descriptions your AI receives when it connects. If the AI is not using a tool correctly, check its description here — clearer descriptions lead to better results.
+              </Typography>
+            </HelpButton>
+          </Box>
+          <McpDocsContent project={project} projectId={id!} />
         </>
       )}
 
@@ -2613,7 +2575,6 @@ export default function ProjectDetail() {
         onSuccess={(result) => {
           setReimportOpen(false)
           setReimportSuccess(result)
-          // Reload project to reflect added/updated tools
           api.get<Project>(`/swagger/projects/${id}`).then((r) => {
             setProject(r.data)
             setBaseUrl(r.data.baseUrl)

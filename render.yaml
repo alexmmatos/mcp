@@ -1,0 +1,40 @@
+services:
+  # ── NestJS app ─────────────────────────────────────────────────────────────
+  - type: web
+    name: arthur-mcp-adapter
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: mongodb://mcp:mcp_password@arthur-mongo:27017/mcp_db?authSource=admin
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DASHBOARD_USER
+        value: admin
+      - key: DASHBOARD_PASSWORD
+        value: admin123
+      - key: MCP_API_KEY
+        generateValue: true
+
+  # ── MongoDB (private — not publicly accessible) ─────────────────────────────
+  - type: pserv
+    name: arthur-mongo
+    runtime: docker
+    image:
+      url: docker.io/mongo:7
+    envVars:
+      - key: MONGO_INITDB_ROOT_USERNAME
+        value: mcp
+      - key: MONGO_INITDB_ROOT_PASSWORD
+        value: mcp_password
+      - key: MONGO_INITDB_DATABASE
+        value: mcp_db
+    disk:
+      name: mongo-data
+      mountPath: /data/db
+      sizeGB: 1

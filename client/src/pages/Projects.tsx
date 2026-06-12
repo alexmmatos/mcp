@@ -21,6 +21,7 @@ import AddIcon from '@mui/icons-material/Add'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import SearchIcon from '@mui/icons-material/Search'
 import LabelIcon from '@mui/icons-material/Label'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import Swal from 'sweetalert2'
 import api from '../api'
 import HelpButton from '../components/HelpButton'
@@ -254,9 +255,14 @@ export default function Projects() {
             </Typography>
           </HelpButton>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/projects/new')}>
-          New project
-        </Button>
+        <Box display="flex" gap={1}>
+          <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={() => navigate('/templates')}>
+            Browse templates
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/projects/new')}>
+            New project
+          </Button>
+        </Box>
       </Box>
 
       {/* Filters */}
